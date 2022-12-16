@@ -38,20 +38,20 @@ def main():
     print_config()
 
     # Define paths for running the script
-    data_dir = os.path.normpath('/to/be/defined')
-    json_path = os.path.normpath('/to/be/defined')
-    logdir = os.path.normpath('/to/be/defined')
+    data_dir = os.path.normpath("/to/be/defined")
+    json_path = os.path.normpath("/to/be/defined")
+    logdir = os.path.normpath("/to/be/defined")
 
     # If use_pretrained is set to 0, ViT weights will not be loaded and random initialization is used
     use_pretrained = 1
-    pretrained_path = os.path.normpath('/to/be/defined')
+    pretrained_path = os.path.normpath("/to/be/defined")
 
     # Training Hyper-parameters
     lr = 1e-4
     max_iterations = 30000
     eval_num = 100
 
-    if os.path.exists(logdir)==False:
+    if os.path.exists(logdir) == False:
         os.mkdir(logdir)
 
     # Training & Validation Transform chain
@@ -122,23 +122,19 @@ def main():
                 pixdim=(1.5, 1.5, 2.0),
                 mode=("bilinear", "nearest"),
             ),
-            ScaleIntensityRanged(
-                keys=["image"], a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True
-            ),
+            ScaleIntensityRanged(keys=["image"], a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
             CropForegroundd(keys=["image", "label"], source_key="image"),
             ToTensord(keys=["image", "label"]),
         ]
     )
 
-    datalist = load_decathlon_datalist(base_dir=data_dir,
-                                       data_list_file_path=json_path,
-                                       is_segmentation=True,
-                                       data_list_key="training")
+    datalist = load_decathlon_datalist(
+        base_dir=data_dir, data_list_file_path=json_path, is_segmentation=True, data_list_key="training"
+    )
 
-    val_files = load_decathlon_datalist(base_dir=data_dir,
-                                        data_list_file_path=json_path,
-                                        is_segmentation=True,
-                                        data_list_key="validation")
+    val_files = load_decathlon_datalist(
+        base_dir=data_dir, data_list_file_path=json_path, is_segmentation=True, data_list_key="validation"
+    )
     train_ds = CacheDataset(
         data=datalist,
         transform=train_transforms,
@@ -146,19 +142,9 @@ def main():
         cache_rate=1.0,
         num_workers=4,
     )
-    train_loader = DataLoader(
-        train_ds, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
-    )
-    val_ds = CacheDataset(
-        data=val_files,
-        transform=val_transforms,
-        cache_num=6,
-        cache_rate=1.0,
-        num_workers=4
-    )
-    val_loader = DataLoader(
-        val_ds, batch_size=1, shuffle=False, num_workers=4, pin_memory=True
-    )
+    train_loader = DataLoader(train_ds, batch_size=1, shuffle=True, num_workers=4, pin_memory=True)
+    val_ds = CacheDataset(data=val_files, transform=val_transforms, cache_num=6, cache_rate=1.0, num_workers=4)
+    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=4, pin_memory=True)
 
     case_num = 0
     img = val_ds[case_num]["image"]
@@ -185,10 +171,10 @@ def main():
     )
 
     # Load ViT backbone weights into UNETR
-    if use_pretrained==1:
-        print('Loading Weights from the Path {}'.format(pretrained_path))
+    if use_pretrained == 1:
+        print("Loading Weights from the Path {}".format(pretrained_path))
         vit_dict = torch.load(pretrained_path)
-        vit_weights = vit_dict['state_dict']
+        vit_weights = vit_dict["state_dict"]
 
         # Remove items of vit_weights if they are not in the ViT backbone (this is used in UNETR).
         # For example, some variables names like conv3d_transpose.weight, conv3d_transpose.bias,
@@ -199,10 +185,10 @@ def main():
         model_dict.update(vit_weights)
         model.vit.load_state_dict(model_dict)
         del model_dict, vit_weights, vit_dict
-        print('Pretrained Weights Succesfully Loaded !')
+        print("Pretrained Weights Succesfully Loaded !")
 
-    elif use_pretrained==0:
-        print('No weights were loaded, all weights being used are randomly initialized!')
+    elif use_pretrained == 0:
+        print("No weights were loaded, all weights being used are randomly initialized!")
 
     model.to(device)
 
@@ -228,33 +214,24 @@ def main():
                 val_inputs, val_labels = (batch["image"].cuda(), batch["label"].cuda())
                 val_outputs = sliding_window_inference(val_inputs, (96, 96, 96), 4, model)
                 val_labels_list = decollate_batch(val_labels)
-                val_labels_convert = [
-                    post_label(val_label_tensor) for val_label_tensor in val_labels_list
-                ]
+                val_labels_convert = [post_label(val_label_tensor) for val_label_tensor in val_labels_list]
                 val_outputs_list = decollate_batch(val_outputs)
-                val_output_convert = [
-                    post_pred(val_pred_tensor) for val_pred_tensor in val_outputs_list
-                ]
+                val_output_convert = [post_pred(val_pred_tensor) for val_pred_tensor in val_outputs_list]
                 dice_metric(y_pred=val_output_convert, y=val_labels_convert)
                 dice = dice_metric.aggregate().item()
                 dice_vals.append(dice)
-                epoch_iterator_val.set_description(
-                    "Validate (%d / %d Steps) (dice=%2.5f)" % (global_step, 10.0, dice)
-                )
+                epoch_iterator_val.set_description("Validate (%d / %d Steps) (dice=%2.5f)" % (global_step, 10.0, dice))
 
             dice_metric.reset()
 
         mean_dice_val = np.mean(dice_vals)
         return mean_dice_val
 
-
     def train(global_step, train_loader, dice_val_best, global_step_best):
         model.train()
         epoch_loss = 0
         step = 0
-        epoch_iterator = tqdm(
-            train_loader, desc="Training (X / X Steps) (loss=X.X)", dynamic_ncols=True
-        )
+        epoch_iterator = tqdm(train_loader, desc="Training (X / X Steps) (loss=X.X)", dynamic_ncols=True)
         for step, batch in enumerate(epoch_iterator):
             step += 1
             x, y = (batch["image"].cuda(), batch["label"].cuda())
@@ -269,9 +246,7 @@ def main():
             )
 
             if (global_step % eval_num == 0 and global_step != 0) or global_step == max_iterations:
-                epoch_iterator_val = tqdm(
-                    val_loader, desc="Validate (X / X Steps) (dice=X.X)", dynamic_ncols=True
-                )
+                epoch_iterator_val = tqdm(val_loader, desc="Validate (X / X Steps) (dice=X.X)", dynamic_ncols=True)
                 dice_val = validation(epoch_iterator_val)
 
                 epoch_loss /= step
@@ -280,9 +255,7 @@ def main():
                 if dice_val > dice_val_best:
                     dice_val_best = dice_val
                     global_step_best = global_step
-                    torch.save(
-                        model.state_dict(), os.path.join(logdir, "best_metric_model.pth")
-                    )
+                    torch.save(model.state_dict(), os.path.join(logdir, "best_metric_model.pth"))
                     print(
                         "Model Was Saved ! Current Best Avg. Dice: {} Current Avg. Dice: {}".format(
                             dice_val_best, dice_val
@@ -310,7 +283,7 @@ def main():
                 plt.xlabel("Iteration")
                 plt.plot(x, y)
                 plt.grid()
-                plt.savefig(os.path.join(logdir, 'btcv_finetune_quick_update.png'))
+                plt.savefig(os.path.join(logdir, "btcv_finetune_quick_update.png"))
                 plt.clf()
                 plt.close(1)
 
@@ -318,15 +291,11 @@ def main():
         return global_step, dice_val_best, global_step_best
 
     while global_step < max_iterations:
-        global_step, dice_val_best, global_step_best = train(
-            global_step, train_loader, dice_val_best, global_step_best
-        )
+        global_step, dice_val_best, global_step_best = train(global_step, train_loader, dice_val_best, global_step_best)
     model.load_state_dict(torch.load(os.path.join(logdir, "best_metric_model.pth")))
 
-    print(
-        f"train completed, best_metric: {dice_val_best:.4f} "
-        f"at iteration: {global_step_best}"
-    )
+    print(f"train completed, best_metric: {dice_val_best:.4f} " f"at iteration: {global_step_best}")
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()
